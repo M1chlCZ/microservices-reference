@@ -4,9 +4,10 @@ package inventory.v1;
 
 option go_package = "github.com/m1chlcz/microservices-reference/api/inventory/v1;inventoryv1";
 
-// Inventory reserves stock for other services.
+// Inventory reserves and releases stock for other services.
 service Inventory {
   rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
 }
 
 // ReservationItem is one SKU and quantity.
@@ -24,3 +25,11 @@ message ReserveRequest {
 message ReserveResponse {
   string reservation_id = 1;
 }
+
+// ReleaseRequest releases one reservation.
+message ReleaseRequest {
+  string reservation_id = 1;
+}
+
+// ReleaseResponse is empty on success.
+message ReleaseResponse {}

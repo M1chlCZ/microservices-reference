@@ -20,15 +20,17 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Inventory_Reserve_FullMethodName = "/inventory.v1.Inventory/Reserve"
+	Inventory_Release_FullMethodName = "/inventory.v1.Inventory/Release"
 )
 
 // InventoryClient is the client API for Inventory service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Inventory reserves stock for other services.
+// Inventory reserves and releases stock for other services.
 type InventoryClient interface {
 	Reserve(ctx context.Context, in *ReserveRequest, opts ...grpc.CallOption) (*ReserveResponse, error)
+	Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error)
 }
 
 type inventoryClient struct {
@@ -49,13 +51,24 @@ func (c *inventoryClient) Reserve(ctx context.Context, in *ReserveRequest, opts 
 	return out, nil
 }
 
+func (c *inventoryClient) Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseResponse)
+	err := c.cc.Invoke(ctx, Inventory_Release_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InventoryServer is the server API for Inventory service.
 // All implementations must embed UnimplementedInventoryServer
 // for forward compatibility.
 //
-// Inventory reserves stock for other services.
+// Inventory reserves and releases stock for other services.
 type InventoryServer interface {
 	Reserve(context.Context, *ReserveRequest) (*ReserveResponse, error)
+	Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error)
 	mustEmbedUnimplementedInventoryServer()
 }
 
@@ -68,6 +81,9 @@ type UnimplementedInventoryServer struct{}
 
 func (UnimplementedInventoryServer) Reserve(context.Context, *ReserveRequest) (*ReserveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Reserve not implemented")
+}
+func (UnimplementedInventoryServer) Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Release not implemented")
 }
 func (UnimplementedInventoryServer) mustEmbedUnimplementedInventoryServer() {}
 func (UnimplementedInventoryServer) testEmbeddedByValue()                   {}
@@ -108,6 +124,24 @@ func _Inventory_Reserve_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Inventory_Release_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InventoryServer).Release(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Inventory_Release_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InventoryServer).Release(ctx, req.(*ReleaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Inventory_ServiceDesc is the grpc.ServiceDesc for Inventory service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -118,6 +152,10 @@ var Inventory_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Reserve",
 			Handler:    _Inventory_Reserve_Handler,
+		},
+		{
+			MethodName: "Release",
+			Handler:    _Inventory_Release_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

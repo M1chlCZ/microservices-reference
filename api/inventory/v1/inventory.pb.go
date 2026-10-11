@@ -164,6 +164,88 @@ func (x *ReserveResponse) GetReservationId() string {
 	return ""
 }
 
+// ReleaseRequest releases one reservation.
+type ReleaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ReservationId string                 `protobuf:"bytes,1,opt,name=reservation_id,json=reservationId,proto3" json:"reservation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseRequest) Reset() {
+	*x = ReleaseRequest{}
+	mi := &file_api_inventory_v1_inventory_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseRequest) ProtoMessage() {}
+
+func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_inventory_v1_inventory_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
+func (*ReleaseRequest) Descriptor() ([]byte, []int) {
+	return file_api_inventory_v1_inventory_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ReleaseRequest) GetReservationId() string {
+	if x != nil {
+		return x.ReservationId
+	}
+	return ""
+}
+
+// ReleaseResponse is empty on success.
+type ReleaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseResponse) Reset() {
+	*x = ReleaseResponse{}
+	mi := &file_api_inventory_v1_inventory_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseResponse) ProtoMessage() {}
+
+func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_inventory_v1_inventory_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
+func (*ReleaseResponse) Descriptor() ([]byte, []int) {
+	return file_api_inventory_v1_inventory_proto_rawDescGZIP(), []int{4}
+}
+
 var File_api_inventory_v1_inventory_proto protoreflect.FileDescriptor
 
 const file_api_inventory_v1_inventory_proto_rawDesc = "" +
@@ -175,9 +257,13 @@ const file_api_inventory_v1_inventory_proto_rawDesc = "" +
 	"\x0eReserveRequest\x123\n" +
 	"\x05items\x18\x01 \x03(\v2\x1d.inventory.v1.ReservationItemR\x05items\"8\n" +
 	"\x0fReserveResponse\x12%\n" +
-	"\x0ereservation_id\x18\x01 \x01(\tR\rreservationId2S\n" +
+	"\x0ereservation_id\x18\x01 \x01(\tR\rreservationId\"7\n" +
+	"\x0eReleaseRequest\x12%\n" +
+	"\x0ereservation_id\x18\x01 \x01(\tR\rreservationId\"\x11\n" +
+	"\x0fReleaseResponse2\x9b\x01\n" +
 	"\tInventory\x12F\n" +
-	"\aReserve\x12\x1c.inventory.v1.ReserveRequest\x1a\x1d.inventory.v1.ReserveResponseBIZGgithub.com/m1chlcz/microservices-reference/api/inventory/v1;inventoryv1b\x06proto3"
+	"\aReserve\x12\x1c.inventory.v1.ReserveRequest\x1a\x1d.inventory.v1.ReserveResponse\x12F\n" +
+	"\aRelease\x12\x1c.inventory.v1.ReleaseRequest\x1a\x1d.inventory.v1.ReleaseResponseBIZGgithub.com/m1chlcz/microservices-reference/api/inventory/v1;inventoryv1b\x06proto3"
 
 var (
 	file_api_inventory_v1_inventory_proto_rawDescOnce sync.Once
@@ -191,18 +277,22 @@ func file_api_inventory_v1_inventory_proto_rawDescGZIP() []byte {
 	return file_api_inventory_v1_inventory_proto_rawDescData
 }
 
-var file_api_inventory_v1_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_api_inventory_v1_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_api_inventory_v1_inventory_proto_goTypes = []any{
 	(*ReservationItem)(nil), // 0: inventory.v1.ReservationItem
 	(*ReserveRequest)(nil),  // 1: inventory.v1.ReserveRequest
 	(*ReserveResponse)(nil), // 2: inventory.v1.ReserveResponse
+	(*ReleaseRequest)(nil),  // 3: inventory.v1.ReleaseRequest
+	(*ReleaseResponse)(nil), // 4: inventory.v1.ReleaseResponse
 }
 var file_api_inventory_v1_inventory_proto_depIdxs = []int32{
 	0, // 0: inventory.v1.ReserveRequest.items:type_name -> inventory.v1.ReservationItem
 	1, // 1: inventory.v1.Inventory.Reserve:input_type -> inventory.v1.ReserveRequest
-	2, // 2: inventory.v1.Inventory.Reserve:output_type -> inventory.v1.ReserveResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	3, // 2: inventory.v1.Inventory.Release:input_type -> inventory.v1.ReleaseRequest
+	2, // 3: inventory.v1.Inventory.Reserve:output_type -> inventory.v1.ReserveResponse
+	4, // 4: inventory.v1.Inventory.Release:output_type -> inventory.v1.ReleaseResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -219,7 +309,7 @@ func file_api_inventory_v1_inventory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_inventory_v1_inventory_proto_rawDesc), len(file_api_inventory_v1_inventory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

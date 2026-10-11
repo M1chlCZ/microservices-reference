@@ -1,4 +1,4 @@
-// Command inventory serves stock positions and reservations over HTTP.
+// Command inventory serves stock positions and reservations over HTTP and gRPC.
 package main
 
 import (
@@ -31,6 +31,15 @@ func run() error {
 	}
 	defer pool.Close()
 	app := platform.NewApp(logger)
-	inventory.RegisterRoutes(app, inventory.NewService(inventory.NewPostgresStore(pool)))
+	service := inventory.NewService(inventory.NewPostgresStore(pool))
+	inventory.RegisterRoutes(app, service)
+	grpcServer := platform.NewGRPCServer(logger)
+	inventory.RegisterGRPC(grpcServer, service)
+	go func() {
+		if grpcErr := platform.RunGRPC(ctx, grpcServer, platform.EnvOr("INVENTORY_GRPC_ADDR", ":9082"), logger); grpcErr != nil && ctx.Err() == nil {
+			logger.Error("grpc server stopped", "error", grpcErr)
+			stop()
+		}
+	}()
 	return platform.Run(ctx, app, platform.EnvOr("INVENTORY_ADDR", ":8082"), logger)
 }
