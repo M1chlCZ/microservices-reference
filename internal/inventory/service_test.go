@@ -169,4 +169,9 @@ func TestReleaseUnknownReservationIsNoOp(t *testing.T) {
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("release invalid id: %d", response.StatusCode)
 	}
+	response, _ = doRequest(t, app, http.MethodDelete,
+		"/reservations/00000000-0000-0000-0000-000000000000", "")
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("release nil id: %d", response.StatusCode)
+	}
 }
