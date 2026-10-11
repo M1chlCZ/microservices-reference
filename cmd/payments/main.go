@@ -4,9 +4,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/m1chlcz/fiber-problem"
 	"github.com/m1chlcz/microservices-reference/internal/eventrelay"
@@ -14,8 +12,6 @@ import (
 	"github.com/m1chlcz/microservices-reference/internal/platform"
 	"github.com/m1chlcz/pgoutbox"
 )
-
-const eventDeliveryTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -32,7 +28,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	ordersURL, err := platform.RequireEnv("ORDERS_URL")
+	ordersTarget, err := platform.RequireEnv("ORDERS_GRPC")
 	if err != nil {
 		return err
 	}
@@ -46,9 +42,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	relay, err := eventrelay.NewWorker(queue, workerID(),
-		&http.Client{Timeout: eventDeliveryTimeout},
-		map[string][]string{"payment.captured": {ordersURL + "/events"}})
+	relay, err := eventrelay.NewWorker(queue, workerID(), map[string][]string{
+		"payment.captured": {ordersTarget},
+	})
 	if err != nil {
 		return err
 	}
@@ -59,8 +55,18 @@ func run() error {
 		}
 	}()
 
+	service := payments.NewService(payments.NewPostgresStore(pool))
+	grpcServer := platform.NewGRPCServer(logger)
+	payments.RegisterGRPC(grpcServer, service)
+	go func() {
+		if grpcErr := platform.RunGRPC(ctx, grpcServer, platform.EnvOr("PAYMENTS_GRPC_ADDR", ":9086"), logger); grpcErr != nil && ctx.Err() == nil {
+			logger.Error("grpc server stopped", "error", grpcErr)
+			stop()
+		}
+	}()
+
 	app := platform.NewApp(logger)
-	payments.RegisterRoutes(app, payments.NewService(payments.NewPostgresStore(pool)))
+	payments.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("PAYMENTS_ADDR", ":8086"), logger)
 }
 
