@@ -47,14 +47,14 @@ const (
 	defaultPasswordIterations = 600000
 	passwordSaltBytes         = 16
 	passwordKeyBytes          = 32
-	minPasswordLength  = 10
-	maxPasswordLength  = 200
-	sessionTokenBytes  = 32
-	sessionDuration    = 24 * time.Hour
-	totpSecretBytes    = 20
-	totpDigits         = 6
-	totpPeriodSeconds  = 30
-	issuerName         = "microservices-reference"
+	minPasswordLength         = 10
+	maxPasswordLength         = 200
+	sessionTokenBytes         = 32
+	sessionDuration           = 24 * time.Hour
+	totpSecretBytes           = 20
+	totpDigits                = 6
+	totpPeriodSeconds         = 30
+	issuerName                = "microservices-reference"
 )
 
 // Account is one registered identity.

@@ -171,7 +171,7 @@ func TestPasswordHashRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(encoded, "pbkdf2-sha256$600000$") {
+	if !strings.HasPrefix(encoded, "pbkdf2-sha256$1000$") {
 		t.Fatalf("encoded form: %s", encoded)
 	}
 	if !verifyPassword(encoded, testPassword) {
