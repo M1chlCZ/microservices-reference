@@ -36,7 +36,6 @@ func clientFor(t *testing.T, address string) eventsv1.EventSinkClient {
 	return eventsv1.NewEventSinkClient(connection)
 }
 
-// TestDeliverStoresEvent checks that a valid event is stored once.
 func TestDeliverStoresEvent(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{}
@@ -57,7 +56,6 @@ func TestDeliverStoresEvent(t *testing.T) {
 	}
 }
 
-// TestDeliverRejections checks that malformed events return InvalidArgument.
 func TestDeliverRejections(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{}

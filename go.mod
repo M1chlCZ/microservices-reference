@@ -9,6 +9,8 @@ require (
 	github.com/m1chlcz/fiber-problem v0.1.2
 	github.com/m1chlcz/pgmig v0.2.0
 	github.com/m1chlcz/pgoutbox v0.2.0
+	google.golang.org/grpc v1.84.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -31,6 +33,4 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
-	google.golang.org/grpc v1.84.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )

@@ -104,8 +104,8 @@ func (service *Service) CreateIntent(ctx context.Context, orderID uuid.UUID, amo
 
 // Capture marks a requires_payment intent captured and writes the
 // payment.captured outbox event in one transaction. It returns a duplicate
-// flag when the intent is captured already. Unknown provider references
-// return ErrUnknownIntent, and refunded intents return ErrInvalidState.
+// flag for a repeated capture. Unknown provider references return
+// ErrUnknownIntent, and refunded intents return ErrInvalidState.
 func (service *Service) Capture(ctx context.Context, providerRef string) (Intent, bool, error) {
 	return service.store.Capture(ctx, providerRef)
 }

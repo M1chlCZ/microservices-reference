@@ -69,7 +69,7 @@ func (store *PostgresStore) Create(ctx context.Context, shipment Shipment) (Ship
 	if err != nil {
 		return Shipment{}, false, fmt.Errorf("encode shipment event: %w", err)
 	}
-	// The insert mirrors pgoutbox.Enqueue and cannot call it inside this transaction.
+	// The insert mirrors pgoutbox.Enqueue, which cannot run inside this transaction.
 	if _, err = tx.Exec(ctx, `
 		INSERT INTO outbox_jobs (kind, aggregate_type, aggregate_id, generation, payload)
 		VALUES ($1, 'shipment', $2, 0, $3)

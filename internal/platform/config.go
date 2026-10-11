@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 )
 
 // RequireEnv returns the value of key. It fails when the value is empty.
@@ -28,16 +27,13 @@ func EnvOr(key, fallback string) string {
 	return value
 }
 
-// EnvDuration returns the duration in key. It returns the fallback when the
-// value is empty or invalid.
-func EnvDuration(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+// WorkerID returns a process identifier for an outbox worker. It combines the
+// host name and the process ID, and uses name when the host name is not
+// available.
+func WorkerID(name string) string {
+	host, err := os.Hostname()
+	if err != nil {
+		host = name
 	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
+	return fmt.Sprintf("%s-%d", host, os.Getpid())
 }

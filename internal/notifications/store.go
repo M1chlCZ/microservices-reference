@@ -58,6 +58,7 @@ func (store *PostgresStore) List(ctx context.Context, limit int) ([]Notification
 		); scanErr != nil {
 			return nil, fmt.Errorf("read notification: %w", scanErr)
 		}
+		notification.ReceivedAt = notification.ReceivedAt.UTC()
 		notifications = append(notifications, notification)
 	}
 	if err = rows.Err(); err != nil {

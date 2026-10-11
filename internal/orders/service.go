@@ -97,8 +97,8 @@ func NewService(store Store, inventory InventoryClient, payments PaymentsClient)
 }
 
 // Create validates the request, reserves stock, creates the payment intent
-// and stores the order with its outbox event in one transaction. A failed
-// later step releases the reservation again.
+// and stores the order with its outbox event in one transaction. When a later
+// step fails, Create releases the reservation.
 func (service *Service) Create(ctx context.Context, request CreateRequest) (Order, error) {
 	request.CustomerRef = strings.TrimSpace(request.CustomerRef)
 	if request.CustomerRef == "" || len(request.CustomerRef) > maxCustomerRefLength {

@@ -58,7 +58,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	relay, err := eventrelay.NewWorker(queue, workerID(),
+	relay, err := eventrelay.NewWorker(queue, platform.WorkerID("orders"),
 		orders.RelayRoutes(notificationsTarget, shippingTarget, invoicingTarget))
 	if err != nil {
 		return err
@@ -99,12 +99,4 @@ func run() error {
 	app := platform.NewApp(logger)
 	orders.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("ORDERS_ADDR", ":8081"), logger)
-}
-
-func workerID() string {
-	host, err := os.Hostname()
-	if err != nil {
-		host = "orders"
-	}
-	return fmt.Sprintf("%s-%d", host, os.Getpid())
 }

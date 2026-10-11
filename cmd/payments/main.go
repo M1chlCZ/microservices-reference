@@ -42,7 +42,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	relay, err := eventrelay.NewWorker(queue, workerID(), map[string][]string{
+	relay, err := eventrelay.NewWorker(queue, platform.WorkerID("payments"), map[string][]string{
 		"payment.captured": {ordersTarget},
 	})
 	if err != nil {
@@ -68,12 +68,4 @@ func run() error {
 	app := platform.NewApp(logger)
 	payments.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("PAYMENTS_ADDR", ":8086"), logger)
-}
-
-func workerID() string {
-	host, err := os.Hostname()
-	if err != nil {
-		host = "payments"
-	}
-	return fmt.Sprintf("%s-%d", host, os.Getpid())
 }

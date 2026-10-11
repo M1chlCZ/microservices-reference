@@ -1,4 +1,4 @@
--- shortcut: this schema mirrors pgoutbox; update it when pgoutbox changes its schema.
+-- This schema mirrors pgoutbox. Update this file when the pgoutbox schema changes.
 CREATE TABLE outbox_jobs (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     kind text NOT NULL,

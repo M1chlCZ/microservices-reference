@@ -108,8 +108,11 @@ func (store *fakeStore) ConfirmTOTP(_ context.Context, accountID uuid.UUID) erro
 	return nil
 }
 
+const testPasswordIterations = 1000
+
 func newTestApp(store *fakeStore) (*fiber.App, *Service) {
 	service := NewService(store)
+	service.passwordIterations = testPasswordIterations
 	app := fiber.New()
 	RegisterRoutes(app, service)
 	return app, service
@@ -164,7 +167,7 @@ func createSession(t *testing.T, app *fiber.App, email, password string) string 
 
 func TestPasswordHashRoundTrip(t *testing.T) {
 	t.Parallel()
-	encoded, err := hashPassword(testPassword)
+	encoded, err := hashPassword(testPassword, testPasswordIterations)
 	if err != nil {
 		t.Fatal(err)
 	}

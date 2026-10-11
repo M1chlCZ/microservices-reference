@@ -60,7 +60,7 @@ func (service *Service) Item(ctx context.Context, sku string) (Item, error) {
 }
 
 // Reserve reserves every item in one transaction and returns the reservation
-// ID. The reservation either reserves every item or none.
+// ID. The service reserves every item or no item.
 func (service *Service) Reserve(ctx context.Context, request ReservationRequest) (uuid.UUID, error) {
 	if err := validateItems(request.Items); err != nil {
 		return uuid.Nil, err
@@ -69,7 +69,7 @@ func (service *Service) Reserve(ctx context.Context, request ReservationRequest)
 }
 
 // Release returns the reserved quantities to stock. A release of an unknown
-// reservation is a no-op.
+// reservation does nothing.
 func (service *Service) Release(ctx context.Context, reservationID uuid.UUID) error {
 	if reservationID == uuid.Nil {
 		return ErrInvalidReservation

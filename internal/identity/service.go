@@ -44,9 +44,9 @@ var ErrTOTPConfirmed = errors.New("totp already confirmed")
 var ErrInvalidCode = errors.New("invalid totp code")
 
 const (
-	passwordIterations = 600000
-	passwordSaltBytes  = 16
-	passwordKeyBytes   = 32
+	defaultPasswordIterations = 600000
+	passwordSaltBytes         = 16
+	passwordKeyBytes          = 32
 	minPasswordLength  = 10
 	maxPasswordLength  = 200
 	sessionTokenBytes  = 32
@@ -98,13 +98,14 @@ type Store interface {
 
 // Service implements the identity use cases.
 type Service struct {
-	store Store
-	now   func() time.Time
+	store              Store
+	now                func() time.Time
+	passwordIterations int
 }
 
 // NewService returns a Service.
 func NewService(store Store) *Service {
-	return &Service{store: store, now: time.Now}
+	return &Service{store: store, now: time.Now, passwordIterations: defaultPasswordIterations}
 }
 
 // Register creates one account and hashes the password before storage.
@@ -113,7 +114,7 @@ func (service *Service) Register(ctx context.Context, email, password string) (A
 	if !validEmail(email) || !validPassword(password) {
 		return Account{}, ErrInvalidAccount
 	}
-	passwordHash, err := hashPassword(password)
+	passwordHash, err := hashPassword(password, service.passwordIterations)
 	if err != nil {
 		return Account{}, err
 	}
@@ -226,16 +227,16 @@ func validPassword(password string) bool {
 	return len(password) >= minPasswordLength && len(password) <= maxPasswordLength
 }
 
-func hashPassword(password string) (string, error) {
+func hashPassword(password string, iterations int) (string, error) {
 	salt := make([]byte, passwordSaltBytes)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("generate password salt: %w", err)
 	}
-	key, err := pbkdf2.Key(sha256.New, password, salt, passwordIterations, passwordKeyBytes)
+	key, err := pbkdf2.Key(sha256.New, password, salt, iterations, passwordKeyBytes)
 	if err != nil {
 		return "", fmt.Errorf("hash password: %w", err)
 	}
-	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", passwordIterations,
+	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", iterations,
 		base64.StdEncoding.EncodeToString(salt),
 		base64.StdEncoding.EncodeToString(key)), nil
 }

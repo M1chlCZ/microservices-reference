@@ -55,7 +55,6 @@ func doRequest(t *testing.T, app *fiber.App, method, path, body string) (*http.R
 	return response, string(payload)
 }
 
-// TestListNotifications checks that the list endpoint returns recent events.
 func TestListNotifications(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{}
