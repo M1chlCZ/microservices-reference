@@ -1,0 +1,15 @@
+# Build output
+/bin/
+/service
+
+# Local environment
+.env
+
+# Test and coverage output
+*.test
+coverage.out
+
+# Editor files
+.DS_Store
+.idea/
+.vscode/

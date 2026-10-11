@@ -1,0 +1,97 @@
+name: microservices-reference
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  migrate:
+    build:
+      context: .
+      args:
+        SERVICE: migrate
+    environment:
+      ORDERS_MIGRATOR_URL: postgres://orders_migrator:orders-migrator-dev@postgres:5432/orders_db
+      INVENTORY_MIGRATOR_URL: postgres://inventory_migrator:inventory-migrator-dev@postgres:5432/inventory_db
+      NOTIFICATIONS_MIGRATOR_URL: postgres://notifications_migrator:notifications-migrator-dev@postgres:5432/notifications_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  inventory:
+    build:
+      context: .
+      args:
+        SERVICE: inventory
+    environment:
+      INVENTORY_DATABASE_URL: postgres://inventory_app:inventory-app-dev@postgres:5432/inventory_db
+      INVENTORY_ADDR: ":8082"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  notifications:
+    build:
+      context: .
+      args:
+        SERVICE: notifications
+    environment:
+      NOTIFICATIONS_DATABASE_URL: postgres://notifications_app:notifications-app-dev@postgres:5432/notifications_db
+      NOTIFICATIONS_ADDR: ":8083"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  orders:
+    build:
+      context: .
+      args:
+        SERVICE: orders
+    environment:
+      ORDERS_DATABASE_URL: postgres://orders_app:orders-app-dev@postgres:5432/orders_db
+      ORDERS_ADDR: ":8081"
+      INVENTORY_URL: http://inventory:8082
+      NOTIFICATIONS_URL: http://notifications:8083
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      inventory:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  postgres-data:
