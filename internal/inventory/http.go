@@ -65,6 +65,10 @@ func releaseHandler(service *Service) fiber.Handler {
 				"Invalid reservation ID", "The reservation ID must be a UUID.")
 		}
 		if err = service.Release(c.Context(), reservationID); err != nil {
+			if errors.Is(err, ErrInvalidReservation) {
+				return fiberproblem.Write(c, fiber.StatusUnprocessableEntity, "invalid_reservation_id",
+					"Invalid reservation ID", "The reservation ID must be a UUID.")
+			}
 			return err
 		}
 		return c.SendStatus(fiber.StatusNoContent)
