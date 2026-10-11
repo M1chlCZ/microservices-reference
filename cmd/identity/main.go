@@ -30,7 +30,16 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	service := identity.NewService(identity.NewPostgresStore(pool))
+	grpcServer := platform.NewGRPCServer(logger)
+	go func() {
+		grpcAddr := platform.EnvOr("IDENTITY_GRPC_ADDR", ":9084")
+		if grpcErr := platform.RunGRPC(ctx, grpcServer, grpcAddr, logger); grpcErr != nil && ctx.Err() == nil {
+			logger.Error("grpc server stopped", "error", grpcErr)
+			stop()
+		}
+	}()
 	app := platform.NewApp(logger)
-	identity.RegisterRoutes(app, identity.NewService(identity.NewPostgresStore(pool)))
+	identity.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("IDENTITY_ADDR", ":8084"), logger)
 }

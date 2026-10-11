@@ -30,7 +30,16 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	service := catalog.NewService(catalog.NewPostgresStore(pool))
+	grpcServer := platform.NewGRPCServer(logger)
+	go func() {
+		grpcAddr := platform.EnvOr("CATALOG_GRPC_ADDR", ":9085")
+		if grpcErr := platform.RunGRPC(ctx, grpcServer, grpcAddr, logger); grpcErr != nil && ctx.Err() == nil {
+			logger.Error("grpc server stopped", "error", grpcErr)
+			stop()
+		}
+	}()
 	app := platform.NewApp(logger)
-	catalog.RegisterRoutes(app, catalog.NewService(catalog.NewPostgresStore(pool)))
+	catalog.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("CATALOG_ADDR", ":8085"), logger)
 }
