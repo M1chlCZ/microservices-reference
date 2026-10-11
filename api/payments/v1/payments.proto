@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package payments.v1;
+
+option go_package = "github.com/m1chlcz/microservices-reference/api/payments/v1;paymentsv1";
+
+// Payments creates payment intents for orders.
+service Payments {
+  rpc CreateIntent(CreateIntentRequest) returns (CreateIntentResponse);
+}
+
+// CreateIntentRequest is one intent creation.
+message CreateIntentRequest {
+  string order_id = 1;
+  int64 amount_minor = 2;
+  string currency = 3;
+  string idempotency_key = 4;
+}
+
+// CreateIntentResponse returns the stored intent.
+message CreateIntentResponse {
+  string intent_id = 1;
+  string provider_ref = 2;
+  bool duplicate = 3;
+}

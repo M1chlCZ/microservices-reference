@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+option go_package = "github.com/m1chlcz/microservices-reference/api/inventory/v1;inventoryv1";
+
+// Inventory reserves stock for other services.
+service Inventory {
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+}
+
+// ReservationItem is one SKU and quantity.
+message ReservationItem {
+  string sku = 1;
+  int32 quantity = 2;
+}
+
+// ReserveRequest reserves every item at once.
+message ReserveRequest {
+  repeated ReservationItem items = 1;
+}
+
+// ReserveResponse returns the reservation identifier.
+message ReserveResponse {
+  string reservation_id = 1;
+}

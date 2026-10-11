@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package events.v1;
+
+option go_package = "github.com/m1chlcz/microservices-reference/api/events/v1;eventsv1";
+
+// EventSink receives one event from an outbox relay. A consumer must treat a
+// repeated delivery as a duplicate and answer with OK.
+service EventSink {
+  rpc Deliver(Event) returns (DeliverResponse);
+}
+
+// Event carries the event kind and its JSON payload.
+message Event {
+  string kind = 1;
+  bytes data = 2;
+}
+
+// DeliverResponse reports the outcome of one delivery.
+message DeliverResponse {
+  bool duplicate = 1;
+}
