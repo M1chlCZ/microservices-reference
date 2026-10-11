@@ -35,7 +35,7 @@ curl -fsS -X POST "$payments_url/webhooks/provider" \
 echo
 
 echo "waiting for the event chain:"
-sleep 4
+sleep 6
 
 echo "order after payment:"
 curl -fsS "$orders_url/orders/$order_id"
