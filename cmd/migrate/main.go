@@ -51,6 +51,41 @@ func run(ctx context.Context) error {
 			fallback: "notifications_owner",
 			files:    migrations.Notifications(),
 		},
+		{
+			name:     "identity",
+			urlEnv:   "IDENTITY_MIGRATOR_URL",
+			roleEnv:  "IDENTITY_OWNER_ROLE",
+			fallback: "identity_owner",
+			files:    migrations.Identity(),
+		},
+		{
+			name:     "catalog",
+			urlEnv:   "CATALOG_MIGRATOR_URL",
+			roleEnv:  "CATALOG_OWNER_ROLE",
+			fallback: "catalog_owner",
+			files:    migrations.Catalog(),
+		},
+		{
+			name:     "payments",
+			urlEnv:   "PAYMENTS_MIGRATOR_URL",
+			roleEnv:  "PAYMENTS_OWNER_ROLE",
+			fallback: "payments_owner",
+			files:    migrations.Payments(),
+		},
+		{
+			name:     "shipping",
+			urlEnv:   "SHIPPING_MIGRATOR_URL",
+			roleEnv:  "SHIPPING_OWNER_ROLE",
+			fallback: "shipping_owner",
+			files:    migrations.Shipping(),
+		},
+		{
+			name:     "invoicing",
+			urlEnv:   "INVOICING_MIGRATOR_URL",
+			roleEnv:  "INVOICING_OWNER_ROLE",
+			fallback: "invoicing_owner",
+			files:    migrations.Invoicing(),
+		},
 	}
 	for _, current := range targets {
 		databaseURL, err := platform.RequireEnv(current.urlEnv)
