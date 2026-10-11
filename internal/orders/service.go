@@ -1,5 +1,5 @@
-// Package orders implements order creation with a stock reservation and a
-// transactional outbox event.
+// Package orders implements order creation with a stock reservation, a
+// payment intent and transactional outbox events.
 package orders
 
 import (
@@ -25,6 +25,9 @@ var ErrUnknownOrder = errors.New("unknown order")
 const (
 	maxCustomerRefLength = 120
 	maxOrderLines        = 50
+	orderCurrency        = "EUR"
+	statusPendingPayment = "pending_payment"
+	statusPaid           = "paid"
 )
 
 // Line is one order line.
@@ -34,12 +37,20 @@ type Line struct {
 	UnitPriceMinor int64  `json:"unitPriceMinor"`
 }
 
+// Payment is the payment intent attached to an order.
+type Payment struct {
+	IntentID    uuid.UUID `json:"intentId"`
+	ProviderRef string    `json:"providerRef"`
+}
+
 // Order is a placed order.
 type Order struct {
 	ID          uuid.UUID `json:"id"`
 	CustomerRef string    `json:"customerRef"`
+	Status      string    `json:"status"`
 	TotalMinor  int64     `json:"totalMinor"`
 	Lines       []Line    `json:"lines"`
+	Payment     *Payment  `json:"payment,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -55,26 +66,39 @@ type InventoryClient interface {
 	Release(ctx context.Context, reservationID uuid.UUID) error
 }
 
+// PaymentsClient creates payment intents in the payments service.
+type PaymentsClient interface {
+	CreateIntent(
+		ctx context.Context,
+		orderID uuid.UUID,
+		amountMinor int64,
+		currency string,
+		idempotencyKey string,
+	) (Payment, error)
+}
+
 // Store persists orders and their outbox events.
 type Store interface {
 	Create(ctx context.Context, order Order) error
 	Get(ctx context.Context, id uuid.UUID) (Order, error)
+	MarkPaid(ctx context.Context, id uuid.UUID) (Order, bool, error)
 }
 
 // Service implements the order use cases.
 type Service struct {
 	store     Store
 	inventory InventoryClient
+	payments  PaymentsClient
 }
 
 // NewService returns a Service.
-func NewService(store Store, inventory InventoryClient) *Service {
-	return &Service{store: store, inventory: inventory}
+func NewService(store Store, inventory InventoryClient, payments PaymentsClient) *Service {
+	return &Service{store: store, inventory: inventory, payments: payments}
 }
 
-// Create validates the request, reserves stock, and stores the order with its
-// outbox event in one transaction. A failed store call releases the
-// reservation again.
+// Create validates the request, reserves stock, creates the payment intent
+// and stores the order with its outbox event in one transaction. A failed
+// later step releases the reservation again.
 func (service *Service) Create(ctx context.Context, request CreateRequest) (Order, error) {
 	request.CustomerRef = strings.TrimSpace(request.CustomerRef)
 	if request.CustomerRef == "" || len(request.CustomerRef) > maxCustomerRefLength {
@@ -87,6 +111,7 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Orde
 	for _, line := range request.Lines {
 		total += int64(line.Quantity) * line.UnitPriceMinor
 	}
+	orderID := uuid.New()
 	reservationID, err := service.inventory.Reserve(ctx, request.Lines)
 	if err != nil {
 		if errors.Is(err, ErrStockUnavailable) {
@@ -94,11 +119,18 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Orde
 		}
 		return Order{}, fmt.Errorf("reserve stock: %w", err)
 	}
+	payment, err := service.payments.CreateIntent(ctx, orderID, total, orderCurrency, orderID.String())
+	if err != nil {
+		_ = service.inventory.Release(ctx, reservationID)
+		return Order{}, fmt.Errorf("create payment intent: %w", err)
+	}
 	order := Order{
-		ID:          uuid.New(),
+		ID:          orderID,
 		CustomerRef: request.CustomerRef,
+		Status:      statusPendingPayment,
 		TotalMinor:  total,
 		Lines:       request.Lines,
+		Payment:     &payment,
 		CreatedAt:   time.Now().UTC(),
 	}
 	if err = service.store.Create(ctx, order); err != nil {
@@ -115,6 +147,15 @@ func (service *Service) Get(ctx context.Context, id uuid.UUID) (Order, error) {
 		return Order{}, ErrUnknownOrder
 	}
 	return service.store.Get(ctx, id)
+}
+
+// MarkPaid marks a pending order paid and records the order.paid event. A
+// repeated call returns the stored order and a duplicate flag.
+func (service *Service) MarkPaid(ctx context.Context, id uuid.UUID) (Order, bool, error) {
+	if id == uuid.Nil {
+		return Order{}, false, ErrUnknownOrder
+	}
+	return service.store.MarkPaid(ctx, id)
 }
 
 func validateLines(lines []Line) error {

@@ -39,6 +39,19 @@ func (store *fakeStore) Get(_ context.Context, id uuid.UUID) (Order, error) {
 	return order, nil
 }
 
+func (store *fakeStore) MarkPaid(_ context.Context, id uuid.UUID) (Order, bool, error) {
+	order, ok := store.orders[id]
+	if !ok {
+		return Order{}, false, ErrUnknownOrder
+	}
+	if order.Status == statusPaid {
+		return order, true, nil
+	}
+	order.Status = statusPaid
+	store.orders[id] = order
+	return order, false, nil
+}
+
 type fakeInventory struct {
 	reservations []uuid.UUID
 	releases     []uuid.UUID
@@ -59,9 +72,31 @@ func (client *fakeInventory) Release(_ context.Context, reservationID uuid.UUID)
 	return nil
 }
 
-func newTestApp(store *fakeStore, inventory *fakeInventory) *fiber.App {
+type fakePayments struct {
+	intents    map[uuid.UUID]Payment
+	failCreate error
+}
+
+func (client *fakePayments) CreateIntent(
+	_ context.Context,
+	orderID uuid.UUID,
+	_ int64,
+	_, _ string,
+) (Payment, error) {
+	if client.failCreate != nil {
+		return Payment{}, client.failCreate
+	}
+	if client.intents == nil {
+		client.intents = map[uuid.UUID]Payment{}
+	}
+	payment := Payment{IntentID: uuid.New(), ProviderRef: "pay_test"}
+	client.intents[orderID] = payment
+	return payment, nil
+}
+
+func newTestApp(store *fakeStore, inventory *fakeInventory, payments *fakePayments) *fiber.App {
 	app := fiber.New()
-	RegisterRoutes(app, NewService(store, inventory))
+	RegisterRoutes(app, NewService(store, inventory, payments))
 	return app
 }
 
@@ -87,7 +122,8 @@ func TestCreateOrderReservesAndStores(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	inventory := &fakeInventory{}
-	app := newTestApp(store, inventory)
+	payments := &fakePayments{}
+	app := newTestApp(store, inventory, payments)
 
 	response, body := doRequest(t, app, http.MethodPost, "/orders",
 		`{"customerRef":"demo","lines":[{"sku":"WIDGET-001","quantity":2,"unitPriceMinor":1999}]}`)
@@ -98,8 +134,15 @@ func TestCreateOrderReservesAndStores(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &order); err != nil {
 		t.Fatal(err)
 	}
-	if order.TotalMinor != 3998 || len(store.orders) != 1 || len(inventory.reservations) != 1 {
-		t.Fatalf("order: %#v, reservations: %d", order, len(inventory.reservations))
+	if order.TotalMinor != 3998 || order.Status != statusPendingPayment {
+		t.Fatalf("order: %#v", order)
+	}
+	if order.Payment == nil || order.Payment.ProviderRef == "" {
+		t.Fatalf("payment: %#v", order.Payment)
+	}
+	if len(store.orders) != 1 || len(inventory.reservations) != 1 || len(payments.intents) != 1 {
+		t.Fatalf("stores: orders %d, reservations %d, intents %d",
+			len(store.orders), len(inventory.reservations), len(payments.intents))
 	}
 	if len(inventory.releases) != 0 {
 		t.Fatalf("unexpected releases: %d", len(inventory.releases))
@@ -111,7 +154,7 @@ func TestCreateOrderCompensatesOnStoreFailure(t *testing.T) {
 	store := newFakeStore()
 	store.fail = errors.New("store is down")
 	inventory := &fakeInventory{}
-	app := newTestApp(store, inventory)
+	app := newTestApp(store, inventory, &fakePayments{})
 
 	response, _ := doRequest(t, app, http.MethodPost, "/orders",
 		`{"customerRef":"demo","lines":[{"sku":"WIDGET-001","quantity":1,"unitPriceMinor":100}]}`)
@@ -123,10 +166,30 @@ func TestCreateOrderCompensatesOnStoreFailure(t *testing.T) {
 	}
 }
 
+func TestCreateOrderCompensatesOnPaymentFailure(t *testing.T) {
+	t.Parallel()
+	inventory := &fakeInventory{}
+	payments := &fakePayments{failCreate: errors.New("payments are down")}
+	store := newFakeStore()
+	app := newTestApp(store, inventory, payments)
+
+	response, _ := doRequest(t, app, http.MethodPost, "/orders",
+		`{"customerRef":"demo","lines":[{"sku":"WIDGET-001","quantity":1,"unitPriceMinor":100}]}`)
+	if response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("create with failing payments: %d", response.StatusCode)
+	}
+	if len(inventory.releases) != 1 || inventory.releases[0] != inventory.reservations[0] {
+		t.Fatalf("compensation missing: releases %v", inventory.releases)
+	}
+	if len(store.orders) != 0 {
+		t.Fatalf("order stored without a payment: %d", len(store.orders))
+	}
+}
+
 func TestCreateOrderRejections(t *testing.T) {
 	t.Parallel()
 	inventory := &fakeInventory{}
-	app := newTestApp(newFakeStore(), inventory)
+	app := newTestApp(newFakeStore(), inventory, &fakePayments{})
 
 	cases := []struct {
 		name string
@@ -157,7 +220,7 @@ func TestCreateOrderRejections(t *testing.T) {
 func TestGetOrder(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
-	app := newTestApp(store, &fakeInventory{})
+	app := newTestApp(store, &fakeInventory{}, &fakePayments{})
 
 	_, body := doRequest(t, app, http.MethodPost, "/orders",
 		`{"customerRef":"demo","lines":[{"sku":"WIDGET-001","quantity":1,"unitPriceMinor":100}]}`)
@@ -167,7 +230,7 @@ func TestGetOrder(t *testing.T) {
 	}
 
 	response, body := doRequest(t, app, http.MethodGet, "/orders/"+created.ID.String(), "")
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, `"customerRef":"demo"`) {
+	if response.StatusCode != http.StatusOK || !strings.Contains(body, `"status":"pending_payment"`) {
 		t.Fatalf("get: %d %s", response.StatusCode, body)
 	}
 	response, _ = doRequest(t, app, http.MethodGet, "/orders/"+uuid.New().String(), "")
