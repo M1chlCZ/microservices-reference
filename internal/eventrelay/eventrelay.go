@@ -1,68 +1,65 @@
-// Package eventrelay turns outbox jobs into HTTP deliveries.
+// Package eventrelay turns outbox jobs into gRPC event deliveries.
 package eventrelay
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"time"
 
+	eventsv1 "github.com/m1chlcz/microservices-reference/api/events/v1"
+	"github.com/m1chlcz/microservices-reference/internal/platform"
 	"github.com/m1chlcz/pgoutbox"
 )
 
-// Envelope is the wire shape of one delivered event.
-type Envelope struct {
-	Kind string          `json:"kind"`
-	Data json.RawMessage `json:"data"`
-}
+const deliveryTimeout = 5 * time.Second
 
-// NewWorker returns a pgoutbox worker that posts every event to the endpoints
-// that its kind maps to. The handler reports success only when every endpoint
-// accepts the event, so a partial failure retries the whole delivery.
-// Consumers must treat a repeated delivery as a duplicate and answer with
-// success.
+// NewWorker returns a pgoutbox worker that delivers every event to the gRPC
+// targets of its kind. A delivery succeeds only when every target answers
+// OK, so a failure leaves the job pending for a retry. Consumers must treat
+// a repeated delivery as a duplicate.
 func NewWorker(
 	queue *pgoutbox.Queue,
 	workerID string,
-	client *http.Client,
 	routes map[string][]string,
 ) (*pgoutbox.Worker, error) {
 	kinds := make([]string, 0, len(routes))
-	for kind := range routes {
+	clients := make(map[string]eventsv1.EventSinkClient)
+	for kind, targets := range routes {
 		kinds = append(kinds, kind)
+		for _, target := range targets {
+			if _, ok := clients[target]; ok {
+				continue
+			}
+			connection, err := platform.Dial(target)
+			if err != nil {
+				return nil, fmt.Errorf("dial %s: %w", target, err)
+			}
+			clients[target] = eventsv1.NewEventSinkClient(connection)
+		}
 	}
 	return pgoutbox.NewWorker(pgoutbox.WorkerConfig{
 		Queue:    queue,
 		Kinds:    kinds,
 		WorkerID: workerID,
 		Handler: func(ctx context.Context, job pgoutbox.Job) error {
-			return deliver(ctx, client, routes[job.Kind], Envelope{
-				Kind: job.Kind,
-				Data: job.Payload,
-			})
+			return deliver(ctx, clients, routes[job.Kind], job.Kind, job.Payload)
 		},
 	})
 }
 
-func deliver(ctx context.Context, client *http.Client, targets []string, envelope Envelope) error {
-	body, err := json.Marshal(envelope)
-	if err != nil {
-		return fmt.Errorf("encode event: %w", err)
-	}
+func deliver(
+	ctx context.Context,
+	clients map[string]eventsv1.EventSinkClient,
+	targets []string,
+	kind string,
+	data []byte,
+) error {
+	deliveryCtx, cancel := context.WithTimeout(ctx, deliveryTimeout)
+	defer cancel()
 	for _, target := range targets {
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+		_, err := clients[target].Deliver(deliveryCtx, &eventsv1.Event{Kind: kind, Data: data})
 		if err != nil {
-			return fmt.Errorf("build event request: %w", err)
-		}
-		request.Header.Set("Content-Type", "application/json")
-		response, err := client.Do(request)
-		if err != nil {
-			return fmt.Errorf("deliver event: %w", err)
-		}
-		response.Body.Close()
-		if response.StatusCode < 200 || response.StatusCode > 299 {
-			return fmt.Errorf("target answered with status %d", response.StatusCode)
+			return fmt.Errorf("deliver to %s: %w", target, err)
 		}
 	}
 	return nil
