@@ -2,7 +2,6 @@ package invoicing
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -135,68 +134,15 @@ func TestIssueRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestEventEndpointIssuesInvoice(t *testing.T) {
-	t.Parallel()
-	app := newTestApp(newFakeStore())
-	orderID := uuid.New()
-
-	response, body := doRequest(t, app, http.MethodPost, "/events",
-		fmt.Sprintf(`{"kind":"order.paid","data":{"orderId":%q,"totalMinor":3998}}`, orderID))
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("issue: %d %s", response.StatusCode, body)
-	}
-	var invoice Invoice
-	if err := json.Unmarshal([]byte(body), &invoice); err != nil {
-		t.Fatal(err)
-	}
-	if invoice.OrderID != orderID || invoice.TotalMinor != 3998 || !strings.HasSuffix(invoice.Number, "-000001") {
-		t.Fatalf("invoice: %#v", invoice)
-	}
-
-	response, body = doRequest(t, app, http.MethodPost, "/events",
-		fmt.Sprintf(`{"kind":"order.paid","data":{"orderId":%q,"totalMinor":3998}}`, orderID))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("duplicate issue: %d %s", response.StatusCode, body)
-	}
-	var repeated Invoice
-	if err := json.Unmarshal([]byte(body), &repeated); err != nil {
-		t.Fatal(err)
-	}
-	if repeated.ID != invoice.ID || repeated.Number != invoice.Number {
-		t.Fatalf("duplicate invoice: %#v", repeated)
-	}
-}
-
-func TestEventEndpointRejections(t *testing.T) {
-	t.Parallel()
-	app := newTestApp(newFakeStore())
-
-	cases := []struct {
-		name string
-		body string
-		want int
-	}{
-		{"invalid body", `{"kind":`, http.StatusUnprocessableEntity},
-		{"other kind", `{"kind":"order.created","data":{"orderId":"` + uuid.New().String() + `","totalMinor":1}}`, http.StatusUnprocessableEntity},
-		{"missing data", `{"kind":"order.paid"}`, http.StatusUnprocessableEntity},
-		{"invalid order id", `{"kind":"order.paid","data":{"orderId":"not-a-uuid","totalMinor":1}}`, http.StatusUnprocessableEntity},
-		{"negative total", `{"kind":"order.paid","data":{"orderId":"` + uuid.New().String() + `","totalMinor":-1}}`, http.StatusUnprocessableEntity},
-	}
-	for _, testCase := range cases {
-		response, body := doRequest(t, app, http.MethodPost, "/events", testCase.body)
-		if response.StatusCode != testCase.want {
-			t.Fatalf("%s: %d %s", testCase.name, response.StatusCode, body)
-		}
-	}
-}
-
 func TestInvoiceLookup(t *testing.T) {
 	t.Parallel()
-	app := newTestApp(newFakeStore())
+	store := newFakeStore()
+	app := newTestApp(store)
 	orderID := uuid.New()
 
-	_, _ = doRequest(t, app, http.MethodPost, "/events",
-		fmt.Sprintf(`{"kind":"order.paid","data":{"orderId":%q,"totalMinor":3998}}`, orderID))
+	if _, _, err := store.Issue(context.Background(), orderID, 3998); err != nil {
+		t.Fatal(err)
+	}
 
 	response, body := doRequest(t, app, http.MethodGet, "/invoices/"+orderID.String(), "")
 	if response.StatusCode != http.StatusOK || !strings.Contains(body, orderID.String()) {

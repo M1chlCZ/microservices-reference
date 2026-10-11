@@ -2,11 +2,9 @@ package shipping
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +12,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
-
-var trackingCodePattern = regexp.MustCompile(`^TRK-[0-9A-F]{10}$`)
 
 type fakeStore struct {
 	byOrder    map[uuid.UUID]Shipment
@@ -88,45 +84,16 @@ func doRequest(t *testing.T, app *fiber.App, method, path, body string) (*http.R
 	return response, string(payload)
 }
 
-func paidEvent(orderID uuid.UUID) string {
-	return `{"kind":"order.paid","data":{"orderId":"` + orderID.String() + `"}}`
-}
-
-func TestCreateShipmentThroughEvent(t *testing.T) {
-	t.Parallel()
-	store := newFakeStore()
-	app := newTestApp(store)
-	orderID := uuid.New()
-
-	response, body := doRequest(t, app, http.MethodPost, "/events", paidEvent(orderID))
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("create: %d %s", response.StatusCode, body)
-	}
-	var shipment Shipment
-	if err := json.Unmarshal([]byte(body), &shipment); err != nil {
+func createTestShipment(t *testing.T, store *fakeStore, orderID uuid.UUID) Shipment {
+	t.Helper()
+	shipment, duplicate, err := NewService(store, "generic").CreateForOrder(context.Background(), orderID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if shipment.OrderID != orderID || shipment.Carrier != "generic" || shipment.Status != "created" {
-		t.Fatalf("shipment: %#v", shipment)
+	if duplicate {
+		t.Fatalf("duplicate shipment for %s", orderID)
 	}
-	if !trackingCodePattern.MatchString(shipment.TrackingCode) {
-		t.Fatalf("tracking code: %q", shipment.TrackingCode)
-	}
-
-	response, body = doRequest(t, app, http.MethodPost, "/events", paidEvent(orderID))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("duplicate: %d %s", response.StatusCode, body)
-	}
-	var duplicate Shipment
-	if err := json.Unmarshal([]byte(body), &duplicate); err != nil {
-		t.Fatal(err)
-	}
-	if duplicate.ID != shipment.ID || duplicate.TrackingCode != shipment.TrackingCode {
-		t.Fatalf("duplicate shipment: %#v", duplicate)
-	}
-	if len(store.byOrder) != 1 {
-		t.Fatalf("shipments: %d", len(store.byOrder))
-	}
+	return shipment
 }
 
 func TestCarrierWebhookTransitions(t *testing.T) {
@@ -134,11 +101,7 @@ func TestCarrierWebhookTransitions(t *testing.T) {
 	store := newFakeStore()
 	app := newTestApp(store)
 	orderID := uuid.New()
-	_, body := doRequest(t, app, http.MethodPost, "/events", paidEvent(orderID))
-	var shipment Shipment
-	if err := json.Unmarshal([]byte(body), &shipment); err != nil {
-		t.Fatal(err)
-	}
+	shipment := createTestShipment(t, store, orderID)
 
 	for _, status := range []string{"in_transit", "in_transit", "delivered", "delivered"} {
 		response, body := doRequest(t, app, http.MethodPost, "/webhooks/carrier",
@@ -157,11 +120,7 @@ func TestCarrierWebhookRejections(t *testing.T) {
 	store := newFakeStore()
 	app := newTestApp(store)
 	orderID := uuid.New()
-	_, body := doRequest(t, app, http.MethodPost, "/events", paidEvent(orderID))
-	var shipment Shipment
-	if err := json.Unmarshal([]byte(body), &shipment); err != nil {
-		t.Fatal(err)
-	}
+	shipment := createTestShipment(t, store, orderID)
 
 	response, body := doRequest(t, app, http.MethodPost, "/webhooks/carrier",
 		`{"trackingCode":"`+shipment.TrackingCode+`","status":"delivered"}`)
@@ -201,11 +160,7 @@ func TestShipmentRead(t *testing.T) {
 	store := newFakeStore()
 	app := newTestApp(store)
 	orderID := uuid.New()
-	_, body := doRequest(t, app, http.MethodPost, "/events", paidEvent(orderID))
-	var shipment Shipment
-	if err := json.Unmarshal([]byte(body), &shipment); err != nil {
-		t.Fatal(err)
-	}
+	shipment := createTestShipment(t, store, orderID)
 
 	response, body := doRequest(t, app, http.MethodGet, "/shipments/"+orderID.String(), "")
 	if response.StatusCode != http.StatusOK || !strings.Contains(body, `"trackingCode":"`+shipment.TrackingCode+`"`) {
@@ -218,29 +173,5 @@ func TestShipmentRead(t *testing.T) {
 	response, _ = doRequest(t, app, http.MethodGet, "/shipments/not-a-uuid", "")
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("read invalid id: %d", response.StatusCode)
-	}
-}
-
-func TestEventRejections(t *testing.T) {
-	t.Parallel()
-	app := newTestApp(newFakeStore())
-
-	cases := []struct {
-		name string
-		body string
-		want int
-	}{
-		{"invalid body", `{"kind":`, http.StatusUnprocessableEntity},
-		{"other kind", `{"kind":"order.created","data":{"orderId":"` + uuid.New().String() + `"}}`, http.StatusUnprocessableEntity},
-		{"missing data", `{"kind":"order.paid"}`, http.StatusUnprocessableEntity},
-		{"data not an object", `{"kind":"order.paid","data":[1,2]}`, http.StatusUnprocessableEntity},
-		{"missing order id", `{"kind":"order.paid","data":{}}`, http.StatusUnprocessableEntity},
-		{"invalid order id", `{"kind":"order.paid","data":{"orderId":"abc"}}`, http.StatusUnprocessableEntity},
-	}
-	for _, testCase := range cases {
-		response, body := doRequest(t, app, http.MethodPost, "/events", testCase.body)
-		if response.StatusCode != testCase.want {
-			t.Fatalf("%s: %d %s", testCase.name, response.StatusCode, body)
-		}
 	}
 }

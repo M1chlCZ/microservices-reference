@@ -37,12 +37,6 @@ func (store *fakeStore) List(_ context.Context, limit int) ([]Notification, erro
 	return recent, nil
 }
 
-func newTestApp(store *fakeStore) *fiber.App {
-	app := fiber.New()
-	RegisterRoutes(app, NewService(store))
-	return app
-}
-
 func doRequest(t *testing.T, app *fiber.App, method, path, body string) (*http.Response, string) {
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -61,50 +55,18 @@ func doRequest(t *testing.T, app *fiber.App, method, path, body string) (*http.R
 	return response, string(payload)
 }
 
-func TestReceiveEvent(t *testing.T) {
-	t.Parallel()
-	store := &fakeStore{}
-	app := newTestApp(store)
-
-	response, body := doRequest(t, app, http.MethodPost, "/events",
-		`{"kind":"order.created","data":{"orderId":"abc","totalMinor":3998}}`)
-	if response.StatusCode != http.StatusCreated || !strings.Contains(body, `"kind":"order.created"`) {
-		t.Fatalf("receive: %d %s", response.StatusCode, body)
-	}
-	if len(store.notifications) != 1 {
-		t.Fatalf("stored notifications: %d", len(store.notifications))
-	}
-}
-
-func TestReceiveEventRejections(t *testing.T) {
-	t.Parallel()
-	app := newTestApp(&fakeStore{})
-
-	cases := []struct {
-		name string
-		body string
-		want int
-	}{
-		{"invalid body", `{"kind":`, http.StatusUnprocessableEntity},
-		{"missing kind", `{"data":{"a":1}}`, http.StatusUnprocessableEntity},
-		{"missing data", `{"kind":"order.created"}`, http.StatusUnprocessableEntity},
-		{"data not an object", `{"kind":"order.created","data":[1,2]}`, http.StatusUnprocessableEntity},
-	}
-	for _, testCase := range cases {
-		response, body := doRequest(t, app, http.MethodPost, "/events", testCase.body)
-		if response.StatusCode != testCase.want {
-			t.Fatalf("%s: %d %s", testCase.name, response.StatusCode, body)
-		}
-	}
-}
-
+// TestListNotifications checks that the list endpoint returns recent events.
 func TestListNotifications(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{}
-	app := newTestApp(store)
+	service := NewService(store)
 	for _, kind := range []string{"order.created", "order.created"} {
-		doRequest(t, app, http.MethodPost, "/events", `{"kind":"`+kind+`","data":{"a":1}}`)
+		if _, err := service.Receive(context.Background(), kind, []byte(`{"a":1}`)); err != nil {
+			t.Fatal(err)
+		}
 	}
+	app := fiber.New()
+	RegisterRoutes(app, service)
 
 	response, body := doRequest(t, app, http.MethodGet, "/notifications?limit=1", "")
 	if response.StatusCode != http.StatusOK {

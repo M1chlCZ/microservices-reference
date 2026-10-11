@@ -4,10 +4,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/m1chlcz/fiber-problem"
 	"github.com/m1chlcz/microservices-reference/internal/eventrelay"
@@ -15,8 +12,6 @@ import (
 	"github.com/m1chlcz/microservices-reference/internal/platform"
 	"github.com/m1chlcz/pgoutbox"
 )
-
-const eventDeliveryTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -33,7 +28,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	notificationsURL, err := platform.RequireEnv("NOTIFICATIONS_URL")
+	notificationsTarget, err := platform.RequireEnv("NOTIFICATIONS_GRPC")
 	if err != nil {
 		return err
 	}
@@ -47,8 +42,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	relay, err := eventrelay.NewWorker(queue, workerID(), &http.Client{Timeout: eventDeliveryTimeout}, map[string][]string{
-		invoicing.EventInvoiceIssued: {strings.TrimRight(notificationsURL, "/") + "/events"},
+	relay, err := eventrelay.NewWorker(queue, workerID(), map[string][]string{
+		"invoice.issued": {notificationsTarget},
 	})
 	if err != nil {
 		return err
@@ -60,8 +55,18 @@ func run() error {
 		}
 	}()
 
+	service := invoicing.NewService(invoicing.NewPostgresStore(pool))
+	grpcServer := platform.NewGRPCServer(logger)
+	invoicing.RegisterGRPC(grpcServer, service)
+	go func() {
+		if grpcErr := platform.RunGRPC(ctx, grpcServer, platform.EnvOr("INVOICING_GRPC_ADDR", ":9088"), logger); grpcErr != nil && ctx.Err() == nil {
+			logger.Error("grpc stopped", "error", grpcErr)
+			stop()
+		}
+	}()
+
 	app := platform.NewApp(logger)
-	invoicing.RegisterRoutes(app, invoicing.NewService(invoicing.NewPostgresStore(pool)))
+	invoicing.RegisterRoutes(app, service)
 	return platform.Run(ctx, app, platform.EnvOr("INVOICING_ADDR", ":8088"), logger)
 }
 

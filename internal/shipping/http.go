@@ -1,7 +1,6 @@
 package shipping
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -10,50 +9,10 @@ import (
 	"github.com/m1chlcz/fiber-problem"
 )
 
-const eventOrderPaid = "order.paid"
-
 // RegisterRoutes adds the shipping routes to the app.
 func RegisterRoutes(app *fiber.App, service *Service) {
-	app.Post("/events", receiveEventHandler(service))
 	app.Post("/webhooks/carrier", carrierWebhookHandler(service))
 	app.Get("/shipments/:orderId", getHandler(service))
-}
-
-func receiveEventHandler(service *Service) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		var request struct {
-			Kind string          `json:"kind"`
-			Data json.RawMessage `json:"data"`
-		}
-		if err := c.Bind().Body(&request); err != nil {
-			return fiberproblem.Write(c, fiber.StatusUnprocessableEntity, "invalid_body",
-				"Invalid request body", "The body must be a JSON object with kind and data.")
-		}
-		if request.Kind != eventOrderPaid {
-			return fiberproblem.Write(c, fiber.StatusUnprocessableEntity, "invalid_event",
-				"Invalid event", "The event kind must be order.paid.")
-		}
-		var data struct {
-			OrderID string `json:"orderId"`
-		}
-		if err := json.Unmarshal(request.Data, &data); err != nil {
-			return fiberproblem.Write(c, fiber.StatusUnprocessableEntity, "invalid_event",
-				"Invalid event", "The data must contain an orderId.")
-		}
-		orderID, err := uuid.Parse(data.OrderID)
-		if err != nil {
-			return fiberproblem.Write(c, fiber.StatusUnprocessableEntity, "invalid_event",
-				"Invalid event", "The data must contain an orderId.")
-		}
-		shipment, duplicate, err := service.CreateForOrder(c.Context(), orderID)
-		if err != nil {
-			return err
-		}
-		if duplicate {
-			return c.Status(fiber.StatusOK).JSON(shipment)
-		}
-		return c.Status(fiber.StatusCreated).JSON(shipment)
-	}
 }
 
 func carrierWebhookHandler(service *Service) fiber.Handler {
