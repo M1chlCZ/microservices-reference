@@ -1,8 +1,9 @@
 # Microservices reference backend
 
 A small Go reference for a service-oriented backend: eight services, REST on
-the edge, gRPC between the services, a transactional outbox with background
-delivery, least-privilege database migrations and RFC 9457 problem responses.
+the edge, gRPC between the services with optional mutual TLS, a transactional
+outbox with background delivery, OpenTelemetry tracing, least-privilege
+database migrations and RFC 9457 problem responses.
 
 The stack composes three of my published open-source packages:
 
@@ -18,6 +19,7 @@ The stack composes three of my published open-source packages:
 ```
  client
    │  REST (HTTP)
+   ├──────────────► gateway :8090 ──gRPC──► inventory :9082
    ▼
  orders :8081 ──gRPC──► inventory :9082
    │      ──gRPC──► payments  :9086
@@ -45,10 +47,12 @@ The stack composes three of my published open-source packages:
 | payments | 8086 | 9086 | `payments_db` | Payment intents, provider webhook |
 | shipping | 8087 | 9087 | `shipping_db` | Shipments, carrier webhook |
 | invoicing | 8088 | 9088 | `invoicing_db` | Invoice numbering and records |
+| gateway | 8090 | — | — | Gateway example: REST to inventory gRPC |
 
 Every service owns its database and its schema. No service reads the database
 of another service. Public REST stays on fiber; all internal traffic is gRPC.
-Every gRPC server serves the health service and reflection.
+Every gRPC server serves the health service and reflection. The gateway
+example owns no database; it only calls the inventory service.
 
 ## gRPC contracts
 
@@ -66,6 +70,14 @@ running stack with grpcurl:
 grpcurl -plaintext localhost:9082 grpc.health.v1.Health/Check
 grpcurl -plaintext -d '{"items":[{"sku":"WIDGET-001","quantity":1}]}' \
   localhost:9082 inventory.v1.Inventory/Reserve
+```
+
+When mTLS is configured, replace `-plaintext` with the client certificate:
+
+```sh
+grpcurl -cacert deploy/certs/ca.crt \
+  -cert deploy/certs/client.crt -key deploy/certs/client.key \
+  localhost:9082 grpc.health.v1.Health/Check
 ```
 
 ## Checkout flow
@@ -113,6 +125,7 @@ releases the reservation again.
 | shipping | `GET /shipments/{orderId}` | Read the shipment of an order |
 | invoicing | `GET /invoices/{orderId}` | Read the invoice of an order |
 | notifications | `GET /notifications?limit=20` | List recent events |
+| gateway | `POST /reservations` | Reserve stock through the inventory gRPC service |
 | all | `GET /healthz` | Liveness check |
 
 Example:
@@ -133,7 +146,9 @@ docker compose down
 
 `make smoke` creates an order, checks the stock conflict path, captures the
 payment through the provider webhook, and reads the paid order, the shipment,
-the invoice and the notifications.
+the invoice and the notifications. It ends with one reservation through the
+gateway example. The stack runs plaintext and untraced; see Certificates and
+Tracing to switch the internal connections to mTLS and to export spans.
 
 ## Local development
 
@@ -149,10 +164,146 @@ go run ./cmd/migrate
 go run ./cmd/inventory & go run ./cmd/notifications & go run ./cmd/orders &
 go run ./cmd/identity & go run ./cmd/catalog & go run ./cmd/payments &
 go run ./cmd/shipping & go run ./cmd/invoicing &
+
+go run ./cmd/gateway &   # http://localhost:8090, calls INVENTORY_GRPC
 ```
 
 The passwords in `deploy/postgres/init/00-roles.sql` and `.env.example` are
 development values. Use real secrets in a real deployment.
+
+## Certificates
+
+The internal gRPC connections run plaintext by default. mTLS needs a
+certificate authority, a server certificate and a client certificate.
+Generate the development set with:
+
+```sh
+make certs
+```
+
+`make certs` runs `go run ./cmd/certgen -dir deploy/certs`, which writes:
+
+| File | Contents |
+| --- | --- |
+| `ca.crt`, `ca.key` | Development certificate authority, valid for 10 years |
+| `server.crt`, `server.key` | Server certificate, valid for 1 year |
+| `client.crt`, `client.key` | Client certificate, valid for 1 year |
+
+The server certificate carries `localhost`, `127.0.0.1`, `::1` and every
+service name as subject alternative names, and its extended key usage allows
+TLS server authentication. The client certificate allows client
+authentication. Both are signed by the development CA. Pass `-hosts` to add
+names, for example a LAN address.
+
+`deploy/certs` is excluded from git and from the Docker build. The files are
+development secrets: never commit or ship them.
+
+## mTLS configuration
+
+Every service reads the same variables:
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `GRPC_TLS_CA` | server and client | CA bundle that verifies the peer |
+| `GRPC_TLS_SERVER_CERT`, `GRPC_TLS_SERVER_KEY` | gRPC server | Local server certificate |
+| `GRPC_TLS_CLIENT_CERT`, `GRPC_TLS_CLIENT_KEY` | gRPC client | Local client certificate |
+
+A gRPC server needs the CA bundle and the server pair; a gRPC client needs the
+CA bundle and the client pair. When one variable of a side is set, all
+variables of that side are required and a partial configuration stops the
+service at startup. When none is set, the endpoint stays on plaintext. There
+is no mode that skips verification: a TLS server requires a client certificate
+signed by the CA, and a TLS client verifies the server certificate, its
+extended key usage and its host name.
+
+Local example, with PostgreSQL and the migrations from Local development in
+place:
+
+```sh
+make certs
+export $(grep -v '^#' .env.example | xargs)
+export GRPC_TLS_CA=deploy/certs/ca.crt
+export GRPC_TLS_SERVER_CERT=deploy/certs/server.crt
+export GRPC_TLS_SERVER_KEY=deploy/certs/server.key
+export GRPC_TLS_CLIENT_CERT=deploy/certs/client.crt
+export GRPC_TLS_CLIENT_KEY=deploy/certs/client.key
+
+go run ./cmd/inventory &   # serves mTLS on :9082
+go run ./cmd/gateway &     # dials inventory with its client certificate
+```
+
+A service that both serves and dials gRPC, such as orders, uses the server
+pair for its own listener and the client pair for its outgoing calls; export
+all five variables for such a service. In compose, mount the certificates as a
+read-only volume and set the variables per service:
+
+```yaml
+    volumes:
+      - ./deploy/certs:/certs:ro
+    environment:
+      GRPC_TLS_CA: /certs/ca.crt
+      GRPC_TLS_SERVER_CERT: /certs/server.crt
+      GRPC_TLS_SERVER_KEY: /certs/server.key
+      GRPC_TLS_CLIENT_CERT: /certs/client.crt
+      GRPC_TLS_CLIENT_KEY: /certs/client.key
+```
+
+Set only the variables of the roles the service uses. The smoke test needs no
+changes when the whole stack runs over mTLS.
+
+## Tracing
+
+Set `OTEL_TRACES_EXPORTER` to export spans; without it the services run
+untraced and all tracing calls are no-ops.
+
+| Variable | Values | Default |
+| --- | --- | --- |
+| `OTEL_TRACES_EXPORTER` | `none`, `stdout`, `otlp` | `none` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector address | `https://localhost:4317` |
+| `OTEL_SERVICE_NAME` | Resource service name | The service name |
+
+The instrumented boundaries:
+
+- The REST edge starts a server span for every request, named after the method
+  and the path, for example `POST /orders`.
+- Every outgoing gRPC call starts a client span named after the full method,
+  for example `inventory.v1.Inventory/Reserve`, and injects the W3C trace
+  context into the call metadata.
+- Every gRPC server starts a server span for the same method and extracts the
+  caller context, so one trace crosses the HTTP and gRPC boundaries.
+
+`stdout` prints the spans as JSON to standard output. `otlp` exports them over
+gRPC to the collector from `OTEL_EXPORTER_OTLP_ENDPOINT` and reads the other
+standard `OTEL_EXPORTER_OTLP_*` variables. A local collector without TLS needs
+for example `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`.
+
+```sh
+OTEL_TRACES_EXPORTER=stdout go run ./cmd/gateway
+```
+
+## Gateway example
+
+`cmd/gateway` is a small edge service with one endpoint. It owns no database
+and no gRPC service; it forwards `POST /reservations` to the inventory service
+over the internal gRPC connection, so the mTLS and tracing configuration of
+the stack applies unchanged:
+
+```
+client ──REST──► gateway :8090 ──gRPC──► inventory :9082
+```
+
+```sh
+curl -X POST http://localhost:8090/reservations \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[{"sku":"WIDGET-001","quantity":1}]}'
+```
+
+The handler passes the request context to the gRPC call, so the trace of the
+edge request continues in the internal service (see Tracing). Run it locally
+with `make gateway`; the target dials `INVENTORY_GRPC` (`localhost:9082` by
+default). The compose stack runs the gateway on `:8090` and `make smoke` calls
+it after the checkout flow. The gateway is an example, not a full API gateway:
+it has no routing, no rate limiting and no authentication.
 
 ## Patterns
 
@@ -176,16 +327,20 @@ development values. Use real secrets in a real deployment.
 
 - The outbox relay runs inside the service that owns the outbox table. A
   broker such as NATS or Kafka would replace the relay and keep the outbox.
-- Internal gRPC uses insecure credentials on the local network. TLS and mTLS
-  are the deployment step.
+- Internal gRPC runs plaintext by default. Setting the certificate variables
+  switches both sides to mTLS with required client certificates, and no
+  setting skips verification.
 - The stack is single-node: one PostgreSQL instance holds eight databases
   with separate roles.
-- There is no API gateway and no rate limiting. Add them at the edge.
+- The gateway example is deliberately small: one endpoint, no routing, no
+  rate limiting. Add a real gateway and authentication at the edge.
 
 ## Development
 
 ```sh
 make proto   # regenerate the protobuf code
+make certs   # write the development CA, server and client certificates
+make gateway # run the gateway example against INVENTORY_GRPC
 make test    # unit and gRPC tests with fakes and ephemeral listeners
 make vet
 make build

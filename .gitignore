@@ -5,6 +5,9 @@
 # Local environment
 .env
 
+# Generated development certificates
+/deploy/certs/
+
 # Test and coverage output
 *.test
 coverage.out

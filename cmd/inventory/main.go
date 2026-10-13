@@ -21,6 +21,15 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 	logger := fiberproblem.NewJSONLogger(os.Stdout)
+	shutdown, err := platform.SetupTracing(ctx, "inventory")
+	if err != nil {
+		return err
+	}
+	defer shutdown()
+	serverTLS, err := platform.ServerTLSFromEnv()
+	if err != nil {
+		return err
+	}
 	databaseURL, err := platform.RequireEnv("INVENTORY_DATABASE_URL")
 	if err != nil {
 		return err
@@ -33,7 +42,10 @@ func run() error {
 	app := platform.NewApp(logger)
 	service := inventory.NewService(inventory.NewPostgresStore(pool))
 	inventory.RegisterRoutes(app, service)
-	grpcServer := platform.NewGRPCServer(logger)
+	grpcServer, err := platform.NewGRPCServer(logger, serverTLS)
+	if err != nil {
+		return err
+	}
 	inventory.RegisterGRPC(grpcServer, service)
 	go func() {
 		if grpcErr := platform.RunGRPC(ctx, grpcServer, platform.EnvOr("INVENTORY_GRPC_ADDR", ":9082"), logger); grpcErr != nil && ctx.Err() == nil {

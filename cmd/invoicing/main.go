@@ -24,6 +24,19 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 	logger := fiberproblem.NewJSONLogger(os.Stdout)
+	shutdown, err := platform.SetupTracing(ctx, "invoicing")
+	if err != nil {
+		return err
+	}
+	defer shutdown()
+	serverTLS, err := platform.ServerTLSFromEnv()
+	if err != nil {
+		return err
+	}
+	clientTLS, err := platform.ClientTLSFromEnv()
+	if err != nil {
+		return err
+	}
 	databaseURL, err := platform.RequireEnv("INVOICING_DATABASE_URL")
 	if err != nil {
 		return err
@@ -44,7 +57,7 @@ func run() error {
 	}
 	relay, err := eventrelay.NewWorker(queue, platform.WorkerID("invoicing"), map[string][]string{
 		invoicing.EventInvoiceIssued: {notificationsTarget},
-	})
+	}, clientTLS)
 	if err != nil {
 		return err
 	}
@@ -56,7 +69,10 @@ func run() error {
 	}()
 
 	service := invoicing.NewService(invoicing.NewPostgresStore(pool))
-	grpcServer := platform.NewGRPCServer(logger)
+	grpcServer, err := platform.NewGRPCServer(logger, serverTLS)
+	if err != nil {
+		return err
+	}
 	invoicing.RegisterGRPC(grpcServer, service)
 	go func() {
 		if grpcErr := platform.RunGRPC(ctx, grpcServer, platform.EnvOr("INVOICING_GRPC_ADDR", ":9088"), logger); grpcErr != nil && ctx.Err() == nil {

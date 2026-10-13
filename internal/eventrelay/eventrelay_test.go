@@ -36,7 +36,10 @@ func startSink(t *testing.T, sink *recordingSink) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := platform.NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server, err := platform.NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)), platform.TLSFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	eventsv1.RegisterEventSinkServer(server, sink)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
@@ -45,7 +48,7 @@ func startSink(t *testing.T, sink *recordingSink) string {
 
 func clientFor(t *testing.T, address string) eventsv1.EventSinkClient {
 	t.Helper()
-	connection, err := platform.Dial(address)
+	connection, err := platform.Dial(address, platform.TLSFiles{})
 	if err != nil {
 		t.Fatal(err)
 	}

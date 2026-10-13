@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt tidy proto up down logs smoke
+.PHONY: build test vet fmt tidy proto certs gateway up down logs smoke
 
 build:
 	go build ./...
@@ -14,6 +14,12 @@ fmt:
 
 tidy:
 	go mod tidy
+
+certs:
+	go run ./cmd/certgen -dir deploy/certs
+
+gateway:
+	INVENTORY_GRPC=$${INVENTORY_GRPC:-localhost:9082} go run ./cmd/gateway
 
 proto:
 	protoc -I . \

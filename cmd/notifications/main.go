@@ -21,6 +21,15 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 	logger := fiberproblem.NewJSONLogger(os.Stdout)
+	shutdown, err := platform.SetupTracing(ctx, "notifications")
+	if err != nil {
+		return err
+	}
+	defer shutdown()
+	serverTLS, err := platform.ServerTLSFromEnv()
+	if err != nil {
+		return err
+	}
 	databaseURL, err := platform.RequireEnv("NOTIFICATIONS_DATABASE_URL")
 	if err != nil {
 		return err
@@ -32,7 +41,10 @@ func run() error {
 	defer pool.Close()
 	service := notifications.NewService(notifications.NewPostgresStore(pool))
 
-	server := platform.NewGRPCServer(logger)
+	server, err := platform.NewGRPCServer(logger, serverTLS)
+	if err != nil {
+		return err
+	}
 	notifications.RegisterGRPC(server, service)
 	go func() {
 		grpcErr := platform.RunGRPC(ctx, server, platform.EnvOr("NOTIFICATIONS_GRPC_ADDR", ":9083"), logger)

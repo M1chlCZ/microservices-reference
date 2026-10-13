@@ -20,7 +20,10 @@ func startInventoryGRPC(t *testing.T, service *Service) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := platform.NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server, err := platform.NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)), platform.TLSFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	RegisterGRPC(server, service)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
@@ -29,7 +32,7 @@ func startInventoryGRPC(t *testing.T, service *Service) string {
 
 func inventoryGRPCClient(t *testing.T, address string) inventoryv1.InventoryClient {
 	t.Helper()
-	connection, err := platform.Dial(address)
+	connection, err := platform.Dial(address, platform.TLSFiles{})
 	if err != nil {
 		t.Fatal(err)
 	}

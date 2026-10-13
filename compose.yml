@@ -212,5 +212,24 @@ services:
       timeout: 3s
       retries: 12
 
+  gateway:
+    build:
+      context: .
+      args:
+        SERVICE: gateway
+    environment:
+      INVENTORY_GRPC: inventory:9082
+      GATEWAY_ADDR: ":8090"
+    depends_on:
+      inventory:
+        condition: service_started
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
 volumes:
   postgres-data:

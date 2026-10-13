@@ -8,6 +8,7 @@ notifications_url=${NOTIFICATIONS_URL:-http://localhost:8083}
 payments_url=${PAYMENTS_URL:-http://localhost:8086}
 shipping_url=${SHIPPING_URL:-http://localhost:8087}
 invoicing_url=${INVOICING_URL:-http://localhost:8088}
+gateway_url=${GATEWAY_URL:-http://localhost:8090}
 
 echo "inventory stock:"
 curl -fsS "$inventory_url/stock/WIDGET-001"
@@ -51,4 +52,10 @@ echo
 
 echo "notifications:"
 curl -fsS "$notifications_url/notifications?limit=10"
+echo
+
+echo "gateway reservation (REST to internal gRPC):"
+curl -fsS -X POST "$gateway_url/reservations" \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[{"sku":"WIDGET-002","quantity":1}]}'
 echo

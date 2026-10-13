@@ -14,13 +14,16 @@ import (
 const deliveryTimeout = 5 * time.Second
 
 // NewWorker returns a pgoutbox worker that delivers every event to the gRPC
-// targets of its kind. A delivery succeeds only when every target answers
-// OK, so a failure leaves the job pending for a retry. Consumers must treat
-// a repeated delivery as a duplicate.
+// targets of its kind. The worker dials the targets with tlsFiles, so the
+// internal calls verify their peers when the configuration enables mTLS. A
+// delivery succeeds only when every target answers OK, so a failure leaves the
+// job pending for a retry. Consumers must treat a repeated delivery as a
+// duplicate.
 func NewWorker(
 	queue *pgoutbox.Queue,
 	workerID string,
 	routes map[string][]string,
+	tlsFiles platform.TLSFiles,
 ) (*pgoutbox.Worker, error) {
 	kinds := make([]string, 0, len(routes))
 	clients := make(map[string]eventsv1.EventSinkClient)
@@ -30,7 +33,7 @@ func NewWorker(
 			if _, ok := clients[target]; ok {
 				continue
 			}
-			connection, err := platform.Dial(target)
+			connection, err := platform.Dial(target, tlsFiles)
 			if err != nil {
 				return nil, fmt.Errorf("dial %s: %w", target, err)
 			}

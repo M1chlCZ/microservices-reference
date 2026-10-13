@@ -21,6 +21,15 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 	logger := fiberproblem.NewJSONLogger(os.Stdout)
+	shutdown, err := platform.SetupTracing(ctx, "catalog")
+	if err != nil {
+		return err
+	}
+	defer shutdown()
+	serverTLS, err := platform.ServerTLSFromEnv()
+	if err != nil {
+		return err
+	}
 	databaseURL, err := platform.RequireEnv("CATALOG_DATABASE_URL")
 	if err != nil {
 		return err
@@ -31,7 +40,10 @@ func run() error {
 	}
 	defer pool.Close()
 	service := catalog.NewService(catalog.NewPostgresStore(pool))
-	grpcServer := platform.NewGRPCServer(logger)
+	grpcServer, err := platform.NewGRPCServer(logger, serverTLS)
+	if err != nil {
+		return err
+	}
 	go func() {
 		grpcAddr := platform.EnvOr("CATALOG_GRPC_ADDR", ":9085")
 		if grpcErr := platform.RunGRPC(ctx, grpcServer, grpcAddr, logger); grpcErr != nil && ctx.Err() == nil {

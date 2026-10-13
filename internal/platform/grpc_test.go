@@ -16,7 +16,10 @@ import (
 func TestGRPCServerServesHealth(t *testing.T) {
 	t.Parallel()
 	listener := bufconn.Listen(1024 * 1024)
-	server := NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server, err := NewGRPCServer(slog.New(slog.NewTextHandler(io.Discard, nil)), TLSFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 

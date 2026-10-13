@@ -24,6 +24,19 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 	logger := fiberproblem.NewJSONLogger(os.Stdout)
+	shutdown, err := platform.SetupTracing(ctx, "shipping")
+	if err != nil {
+		return err
+	}
+	defer shutdown()
+	serverTLS, err := platform.ServerTLSFromEnv()
+	if err != nil {
+		return err
+	}
+	clientTLS, err := platform.ClientTLSFromEnv()
+	if err != nil {
+		return err
+	}
 	databaseURL, err := platform.RequireEnv("SHIPPING_DATABASE_URL")
 	if err != nil {
 		return err
@@ -45,7 +58,7 @@ func run() error {
 	}
 	relay, err := eventrelay.NewWorker(queue, platform.WorkerID("shipping"), map[string][]string{
 		"shipment.created": {notificationsTarget},
-	})
+	}, clientTLS)
 	if err != nil {
 		return err
 	}
@@ -57,7 +70,10 @@ func run() error {
 	}()
 
 	service := shipping.NewService(shipping.NewPostgresStore(pool), carrier)
-	grpcServer := platform.NewGRPCServer(logger)
+	grpcServer, err := platform.NewGRPCServer(logger, serverTLS)
+	if err != nil {
+		return err
+	}
 	shipping.RegisterGRPC(grpcServer, service)
 	go func() {
 		addr := platform.EnvOr("SHIPPING_GRPC_ADDR", ":9087")

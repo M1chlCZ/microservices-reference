@@ -19,7 +19,8 @@ const (
 )
 
 // NewApp returns a Fiber app with the shared middleware stack: request IDs,
-// access logs, panic recovery, a body limit and RFC 9457 problem responses.
+// OpenTelemetry tracing, access logs, panic recovery, a body limit and RFC
+// 9457 problem responses.
 func NewApp(logger *slog.Logger) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: fiberproblem.ErrorHandler,
@@ -29,6 +30,7 @@ func NewApp(logger *slog.Logger) *fiber.App {
 		return nil
 	})
 	app.Use(fiberproblem.RequestID())
+	app.Use(tracingMiddleware())
 	app.Use(fiberproblem.AccessLog(logger, nil))
 	app.Use(fiberproblem.Recovery(logger))
 	app.Use(fiberproblem.BodyLimit(bodyLimitBytes, nil))
