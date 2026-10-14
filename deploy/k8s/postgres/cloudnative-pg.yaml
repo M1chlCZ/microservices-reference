@@ -1,0 +1,44 @@
+# The database tier of the reference. It needs the CloudNativePG operator:
+# https://cloudnative-pg.io/documentation/
+#
+# Three instances, one primary and two replicas, with synchronous
+# replication and automatic failover. The read-write service
+# `postgres-rw.microservices-data.svc` serves the applications.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: microservices-data
+  labels:
+    app.kubernetes.io/part-of: microservices-reference
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: microservices-data
+spec:
+  instances: 3
+  primaryUpdateStrategy: unsupervised
+  storage:
+    size: 20Gi
+    storageClass: standard
+  affinity:
+    topologyKey: topology.kubernetes.io/zone
+    enablePodAntiAffinity: true
+  postgresql:
+    parameters:
+      max_connections: "200"
+      synchronous_commit: "on"
+  monitoring:
+    enablePodMonitor: true
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://microservices-backups/postgres
+      s3Credentials:
+        accessKeyId:
+          name: backup-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: backup-credentials
+          key: SECRET_ACCESS_KEY
+    retentionPolicy: "30d"

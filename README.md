@@ -335,6 +335,28 @@ it has no routing, no rate limiting and no authentication.
 - The gateway example is deliberately small: one endpoint, no routing, no
   rate limiting. Add a real gateway and authentication at the edge.
 
+## Reliable operation
+
+The compose stack stays the quickest way to run the reference. `deploy/k8s`
+appends a production-style deployment on two Kubernetes clusters with one
+shared database, and `deploy/cloudflare` steers traffic between them.
+[ARCHITECTURE.md](ARCHITECTURE.md) documents the system architecture first and
+this deployment architecture after it.
+
+- The database tier is a CloudNativePG cluster: three PostgreSQL instances
+  with synchronous replication and automatic failover.
+- The primary cluster runs every workload. The standby cluster runs the same
+  manifests at zero replicas.
+- The Cloudflare Worker probes the active cluster every minute. After two
+  consecutive failures it wakes the standby through the `wake-standby`
+  workflow, switches traffic and alerts a webhook. It fails back to the
+  primary after recovery.
+- Every service is stateless, runs two or more replicas and scales with a CPU
+  autoscaler. Network policies and mutual TLS protect the internal traffic.
+- `images.yml` builds one image per service on every version tag.
+
+Start with [deploy/k8s/README.md](deploy/k8s/README.md).
+
 ## Development
 
 ```sh

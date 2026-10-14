@@ -23,8 +23,9 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `images.yml` builds one image per service on every version tag;
   `wake-standby.yml` scales the standby cluster through the
   `STANDBY_KUBE_CONFIG_B64` secret.
-- [ARCHITECTURE.md](ARCHITECTURE.md): the topology, the failure scenarios,
-  the runbooks and the limits of the deployment.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the system architecture of the
+  services and their models, with the deployment topology, the failure
+  scenarios, the runbooks and the limits appended after it.
 
 ## [0.2.0] - 2026-10-14
 

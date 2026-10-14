@@ -1,0 +1,22 @@
+name = "microservices-reference-edge"
+main = "worker.js"
+compatibility_date = "2026-10-14"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "HEALTH"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+PRIMARY_NAME = "primary"
+STANDBY_NAME = "standby"
+PRIMARY_URL = "https://primary.example.com"
+STANDBY_URL = "https://standby.example.com"
+GITHUB_REPO = "M1chlCZ/microservices-reference"
+GITHUB_WORKFLOW = "wake-standby.yml"
+
+# Secrets are not stored in this file:
+#   wrangler secret put GITHUB_TOKEN
+#   wrangler secret put ALERT_WEBHOOK

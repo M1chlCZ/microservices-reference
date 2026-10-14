@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    app.kubernetes.io/name: migrate
+    app.kubernetes.io/part-of: microservices-reference
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/m1chlcz/microservices-reference-migrate:0.3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ORDERS_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: orders-migrator-url
+            - name: INVENTORY_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: inventory-migrator-url
+            - name: NOTIFICATIONS_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: notifications-migrator-url
+            - name: IDENTITY_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: identity-migrator-url
+            - name: CATALOG_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: catalog-migrator-url
+            - name: PAYMENTS_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: payments-migrator-url
+            - name: SHIPPING_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: shipping-migrator-url
+            - name: INVOICING_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: microservices-secrets
+                  key: invoicing-migrator-url
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

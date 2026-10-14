@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservices-config
+data:
+  INVENTORY_GRPC: inventory:9082
+  PAYMENTS_GRPC: payments:9086
+  ORDERS_GRPC: orders:9081
+  NOTIFICATIONS_GRPC: notifications:9083
+  SHIPPING_GRPC: shipping:9087
+  INVOICING_GRPC: invoicing:9088
+  SHIPPING_CARRIER: generic

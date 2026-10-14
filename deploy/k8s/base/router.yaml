@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: router-config
+data:
+  Caddyfile: |
+    :8080 {
+      @health path /healthz
+      handle @health {
+        respond "ok" 200
+      }
+      @orders path /orders*
+      handle @orders {
+        reverse_proxy orders:8081
+      }
+      @inventory path /stock* /reservations*
+      handle @inventory {
+        reverse_proxy inventory:8082
+      }
+      @notifications path /notifications*
+      handle @notifications {
+        reverse_proxy notifications:8083
+      }
+      @identity path /accounts* /sessions*
+      handle @identity {
+        reverse_proxy identity:8084
+      }
+      @catalog path /products*
+      handle @catalog {
+        reverse_proxy catalog:8085
+      }
+      @payments path /payment-intents* /webhooks/provider*
+      handle @payments {
+        reverse_proxy payments:8086
+      }
+      @shipping path /shipments* /webhooks/carrier*
+      handle @shipping {
+        reverse_proxy shipping:8087
+      }
+      @invoicing path /invoices*
+      handle @invoicing {
+        reverse_proxy invoicing:8088
+      }
+      handle {
+        respond "not found" 404
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router
+  labels:
+    app.kubernetes.io/name: router
+    app.kubernetes.io/part-of: microservices-reference
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: router
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: router
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: router
+      containers:
+        - name: router
+          image: caddy:2-alpine
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/caddy
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: config-state
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: router-config
+        - name: data
+          emptyDir: {}
+        - name: config-state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: router
+  labels:
+    app.kubernetes.io/name: router
+spec:
+  selector:
+    app.kubernetes.io/name: router
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: router
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: router

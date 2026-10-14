@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: microservices
+resources:
+  - ../../base
+components:
+  - ../../components/grpc-tls
+replicas:
+  - name: router
+    count: 0
+  - name: cloudflared
+    count: 0
+  - name: orders
+    count: 0
+  - name: inventory
+    count: 0
+  - name: notifications
+    count: 0
+  - name: identity
+    count: 0
+  - name: catalog
+    count: 0
+  - name: payments
+    count: 0
+  - name: shipping
+    count: 0
+  - name: invoicing
+    count: 0
+  - name: gateway
+    count: 0

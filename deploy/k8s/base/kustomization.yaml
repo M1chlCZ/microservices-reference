@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: microservices
+resources:
+  - namespace.yaml
+  - config.yaml
+  - router.yaml
+  - cloudflared.yaml
+  - network-policies.yaml
+  - orders.yaml
+  - inventory.yaml
+  - notifications.yaml
+  - identity.yaml
+  - catalog.yaml
+  - payments.yaml
+  - shipping.yaml
+  - invoicing.yaml
+  - gateway.yaml

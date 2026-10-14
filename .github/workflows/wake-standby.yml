@@ -1,0 +1,27 @@
+name: wake-standby
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wake-standby
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scale the standby cluster
+        env:
+          STANDBY_KUBE_CONFIG_B64: ${{ secrets.STANDBY_KUBE_CONFIG_B64 }}
+        run: |
+          if [ -z "$STANDBY_KUBE_CONFIG_B64" ]; then
+            echo "STANDBY_KUBE_CONFIG_B64 is not set" >&2
+            exit 1
+          fi
+          mkdir -p ~/.kube
+          echo "$STANDBY_KUBE_CONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl -n microservices scale deployment --all --replicas=2
+          kubectl -n microservices rollout status deployment --all --timeout=300s
