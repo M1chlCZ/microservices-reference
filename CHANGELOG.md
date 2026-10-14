@@ -4,7 +4,29 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-14
+
+### Added
+
+- Kubernetes manifests in `deploy/k8s`: a kustomize base with deployments,
+  services, a Caddy path router and a Cloudflare Tunnel, the `grpc-tls` and
+  `hpa` components, a migration job, and `primary` and `standby` overlays
+  that run the same stack at two levels.
+- The CloudNativePG cluster in `deploy/k8s/postgres`: three PostgreSQL
+  instances with synchronous replication and automatic failover.
+- Network policies: ingress denied by default, in-namespace traffic, DNS,
+  the database port and outbound HTTPS and QUIC only.
+- The edge steering Worker in `deploy/cloudflare`: it probes the active
+  cluster every minute, wakes the standby through a GitHub workflow after two
+  consecutive failures, switches traffic, alerts a webhook and fails back
+  after recovery.
+- `images.yml` builds one image per service on every version tag;
+  `wake-standby.yml` scales the standby cluster through the
+  `STANDBY_KUBE_CONFIG_B64` secret.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the topology, the failure scenarios,
+  the runbooks and the limits of the deployment.
+
+## [0.2.0] - 2026-10-14
 
 ### Added
 
